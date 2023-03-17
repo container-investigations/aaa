@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
+	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/confidential"
 	"github.com/container-investigations/aaa/pkg/keyprovider"
 	"github.com/Microsoft/confidential-sidecar-containers/pkg/attest"
 	"github.com/Microsoft/confidential-sidecar-containers/pkg/common"
@@ -115,6 +116,29 @@ type server struct {
 func (s *server) SayHello(ctx context.Context, in *keyprovider.HelloRequest) (*keyprovider.HelloReply, error) {
 	log.Printf("Received: %v", in.GetName())
 	return &keyprovider.HelloReply{Message: "Hello " + in.GetName()}, nil
+}
+
+// Convert federated token stored in a file into access token for a resource
+// Borrowed from https://github.com/Azure/azure-workload-identity/blob/c155ecee0d9fa681c15ead4bbdce729fd8c99da1/pkg/proxy/proxy.go#L195
+// See tutorial at: https://learn.microsoft.com/en-us/azure/aks/learn/tutorial-kubernetes-workload-identity
+
+func getAccessTokenFromFederatedToken(ctx context.Context, federatedTokenFile, clientID, tenantID, resource string) (string, error) {
+	cred := confidential.NewCredFromAssertionCallback(func(context.Context, confidential.AssertionRequestOptions) (string, error) {
+		token, err := os.ReadFile(federatedTokenFile)
+		return string(token), err
+	})
+
+	confidentialClient, err := confidential.New(clientID, cred,
+		confidential.WithAuthority(fmt.Sprintf("https://login.microsoftonline.com/%s/oauth2/token", tenantID)))
+	if err != nil {
+		return "", fmt.Errorf("failed to create confidential client: %v", err)
+	}
+
+	result, err := confidentialClient.AcquireTokenByCredential(ctx, []string{resource + "/.default"})
+	if err != nil {
+		return "", fmt.Errorf("failed to acquire access token: %v", err)
+	}
+	return result.AccessToken, nil
 }
 
 func directWrap(optsdata []byte, key_path string) ([]byte, error) {
@@ -245,9 +269,23 @@ func (s *server) UnWrapKey(c context.Context, grpcInput *keyprovider.KeyProvider
 	}
 	log.Printf("Annotation packet: %v", annotation)
 
+	bearerToken := ""
+
+	// Note: obtaining access token through federated token file is AKS specific
+	clientID := os.Getenv("AZURE_CLIENT_ID")
+	tenantID := os.Getenv("AZURE_TENANT_ID")
+	tokenFile := os.Getenv("AZURE_FEDERATED_TOKEN_FILE")
+	if clientID != "" && tenantID != "" && tokenFile != "" {
+		bearerToken, err = getAccessTokenFromFederatedToken(c, tokenFile, clientID, tenantID, "https://managedhsm.azure.net")
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "Failed to obtain access token to MHSM: %v", err)
+		}
+	}
+
 	mhsm := skr.MHSM{
 		Endpoint:    annotation.KmsEndpoint,
 		APIVersion:  "api-version=7.3-preview",
+		BearerToken: bearerToken,
 	}
 
 	maa := attest.MAA{
@@ -324,6 +362,19 @@ func main() {
 	key_path := flag.String("keypath", "", "The path to the wrapping key")
 	outfile := flag.String("outfile", "", "The file to save the wrapped data")
 	flag.Parse()
+
+	var er error
+	bearerToken := ""
+	clientID := os.Getenv("AZURE_CLIENT_ID")
+	tenantID := os.Getenv("AZURE_TENANT_ID")
+	tokenFile := os.Getenv("AZURE_FEDERATED_TOKEN_FILE")
+	if tenantID != "" && tokenFile != "" {
+		bearerToken, er = getAccessTokenFromFederatedToken(context.TODO(), tokenFile, clientID, tenantID, "https://managedhsm.azure.net")
+		if er != nil {
+			log.Fatalf("Failed to get access token %v", er)
+		}
+	}
+	log.Printf("bearerToken: %v", bearerToken)
 
 	if *infile  != "" {
 		bytes, err := os.ReadFile(*infile)
