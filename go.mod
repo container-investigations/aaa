@@ -3,6 +3,7 @@ module github.com/container-investigations/aaa
 go 1.18
 
 require (
+	github.com/AzureAD/microsoft-authentication-library-for-go v0.7.0
 	github.com/Microsoft/confidential-sidecar-containers v0.0.0-20230113133717-a8c6d756670a
 	github.com/golang/protobuf v1.4.3
 	google.golang.org/grpc v1.43.0
@@ -11,6 +12,9 @@ require (
 require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.0-20210816181553-5444fa50b93d // indirect
 	github.com/goccy/go-json v0.7.8 // indirect
+	github.com/golang-jwt/jwt/v4 v4.4.2 // indirect
+	github.com/google/uuid v1.2.0 // indirect
+	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/lestrrat-go/backoff/v2 v2.0.8 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.0 // indirect
 	github.com/lestrrat-go/httpcc v1.0.0 // indirect
