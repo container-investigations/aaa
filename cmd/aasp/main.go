@@ -34,6 +34,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+var (
+	EncodedUvmInformation common.UvmInformation
+)
+
 type AzureInformation struct {
 	// Endpoint of the certificate cache service from which
 	// the certificate chain endorsing hardware attestations
@@ -270,23 +274,22 @@ func (s *server) UnWrapKey(c context.Context, grpcInput *keyprovider.KeyProvider
 	}
 	log.Printf("Annotation packet: %v", annotation)
 
-	bearerToken := ""
+	// bearerToken := ""
 
-	// Note: obtaining access token through federated token file is AKS specific
-	clientID := os.Getenv("AZURE_CLIENT_ID")
-	tenantID := os.Getenv("AZURE_TENANT_ID")
-	tokenFile := os.Getenv("AZURE_FEDERATED_TOKEN_FILE")
-	if clientID != "" && tenantID != "" && tokenFile != "" {
-		bearerToken, err = getAccessTokenFromFederatedToken(c, tokenFile, clientID, tenantID, "https://managedhsm.azure.net")
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "Failed to obtain access token to MHSM: %v", err)
-		}
-	}
+	// // Note: obtaining access token through federated token file is AKS specific
+	// clientID := os.Getenv("AZURE_CLIENT_ID")
+	// tenantID := os.Getenv("AZURE_TENANT_ID")
+	// tokenFile := os.Getenv("AZURE_FEDERATED_TOKEN_FILE")
+	// if clientID != "" && tenantID != "" && tokenFile != "" {
+	// 	bearerToken, err = getAccessTokenFromFederatedToken(c, tokenFile, clientID, tenantID, "https://managedhsm.azure.net")
+	// 	if err != nil {
+	// 		return nil, status.Errorf(codes.Internal, "Failed to obtain access token to MHSM: %v", err)
+	// 	}
+	// }
 
 	mhsm := skr.MHSM{
-		Endpoint:    annotation.KmsEndpoint,
-		APIVersion:  "api-version=7.3-preview",
-		BearerToken: bearerToken,
+		Endpoint:   annotation.KmsEndpoint,
+		APIVersion: "api-version=7.3-preview",
 	}
 
 	maa := attest.MAA{
@@ -415,7 +418,17 @@ func main() {
 	if azure_info.Identity.ClientId == "" {
 		log.Printf("Warning: Env AZURE_CLIENT_ID is not set")
 	}
-
+	uvm, err := common.GetUvmInfomation()
+	if err != nil {
+		fmt.Println("oh no a error occurred for getting security stuff.")
+		fmt.Println(err)
+	}
+	fmt.Println("uvm.EncodedUvmReferenceInfo is: ")
+	fmt.Println(uvm.EncodedUvmReferenceInfo)
+	fmt.Println("uvm.CertChain is: ")
+	fmt.Println(uvm.CertChain)
+	fmt.Println("azure_info.Identity.ClientId is: ")
+	fmt.Println(azure_info.Identity.ClientId)
 	s := grpc.NewServer()
 	keyprovider.RegisterKeyProviderServiceServer(s, &server{})
 	reflection.Register(s)
