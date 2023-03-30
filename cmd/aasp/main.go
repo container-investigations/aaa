@@ -287,7 +287,7 @@ func (s *server) UnWrapKey(c context.Context, grpcInput *keyprovider.KeyProvider
 	// 	}
 	// }
 
-	mhsm := skr.MHSM{
+	mhsm := skr.AKV{
 		Endpoint:   annotation.KmsEndpoint,
 		APIVersion: "api-version=7.3-preview",
 	}
@@ -301,19 +301,25 @@ func (s *server) UnWrapKey(c context.Context, grpcInput *keyprovider.KeyProvider
 	skrKeyBlob := skr.KeyBlob{
 		KID:       annotation.Kid,
 		Authority: maa,
-		MHSM:      mhsm,
+		AKV:       mhsm,
 	}
 
 	// MHSM has limit on the request size. We do not pass the EncodedSecurityPolicy here so
 	// it is not presented as fine-grained init-time claims in the MAA token, which would
 	// introduce larger MAA tokens that MHSM would accept
-	keyBytes, err := skr.SecureKeyRelease("", azure_info.CertCache, azure_info.Identity, skrKeyBlob)
+	//keyBytes, err := skr.SecureKeyRelease1("", azure_info.CertCache, azure_info.Identity, skrKeyBlob)
+	keyBytes, err := skr.SecureKeyRelease1(azure_info.CertCache, azure_info.Identity, skrKeyBlob, EncodedUvmInformation)
 
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "SKR failed: %v", err)
 	}
 
-	key, err := x509.ParsePKCS8PrivateKey(keyBytes)
+	jwkJSONBytes, err := json.Marshal(keyBytes)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "SKR failed: %v", err)
+	}
+
+	key, err := x509.ParsePKCS8PrivateKey(jwkJSONBytes)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Released key is invalid: %v", err)
 	}
@@ -418,17 +424,17 @@ func main() {
 	if azure_info.Identity.ClientId == "" {
 		log.Printf("Warning: Env AZURE_CLIENT_ID is not set")
 	}
-	uvm, err := common.GetUvmInfomation()
+
+	EncodedUvmInformation, err = common.GetUvmInfomation()
 	if err != nil {
 		fmt.Println("oh no a error occurred for getting security stuff.")
 		fmt.Println(err)
 	}
-	fmt.Println("uvm.EncodedUvmReferenceInfo is: ")
-	fmt.Println(uvm.EncodedUvmReferenceInfo)
-	fmt.Println("uvm.CertChain is: ")
-	fmt.Println(uvm.CertChain)
-	fmt.Println("azure_info.Identity.ClientId is: ")
-	fmt.Println(azure_info.Identity.ClientId)
+	fmt.Println("EncodedSecurityPolicy")
+	fmt.Println(EncodedUvmInformation.EncodedSecurityPolicy)
+	fmt.Println("EncodedUvmReferenceInfo")
+	fmt.Println(EncodedUvmInformation.EncodedUvmReferenceInfo)
+
 	s := grpc.NewServer()
 	keyprovider.RegisterKeyProviderServiceServer(s, &server{})
 	reflection.Register(s)

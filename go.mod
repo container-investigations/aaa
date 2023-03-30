@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/AzureAD/microsoft-authentication-library-for-go v0.7.0
-	github.com/Microsoft/confidential-sidecar-containers v0.0.0-20230113133717-a8c6d756670a
+	github.com/Microsoft/confidential-sidecar-containers v0.0.0-20230306172545-a8cbb5fd915c
 	github.com/golang/protobuf v1.4.3
 	google.golang.org/grpc v1.43.0
 )
