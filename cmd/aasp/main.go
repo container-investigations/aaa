@@ -270,23 +270,9 @@ func (s *server) UnWrapKey(c context.Context, grpcInput *keyprovider.KeyProvider
 	}
 	log.Printf("Annotation packet: %v", annotation)
 
-	bearerToken := ""
-
-	// Note: obtaining access token through federated token file is AKS specific
-	clientID := os.Getenv("AZURE_CLIENT_ID")
-	tenantID := os.Getenv("AZURE_TENANT_ID")
-	tokenFile := os.Getenv("AZURE_FEDERATED_TOKEN_FILE")
-	if clientID != "" && tenantID != "" && tokenFile != "" {
-		bearerToken, err = getAccessTokenFromFederatedToken(c, tokenFile, clientID, tenantID, "https://managedhsm.azure.net")
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "Failed to obtain access token to MHSM: %v", err)
-		}
-	}
-
 	mhsm := skr.MHSM{
-		Endpoint:    annotation.KmsEndpoint,
-		APIVersion:  "api-version=7.3-preview",
-		BearerToken: bearerToken,
+		Endpoint:   annotation.KmsEndpoint,
+		APIVersion: "api-version=7.3-preview",
 	}
 
 	maa := attest.MAA{
